@@ -1,0 +1,7 @@
+env = "prod"
+location = "eastus"
+prefix = "hc"
+subscription_id = "<your-subscription-id>"
+tenant_id = "<your-tenant-id>"
+name_suffix = "001"
+storage_cmk_key_id = "" # optional: full resource id of Key Vault key

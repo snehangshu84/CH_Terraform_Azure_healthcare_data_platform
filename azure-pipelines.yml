@@ -1,0 +1,71 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+variables:
+  TF_ENV: "prod"
+  TF_WORKING_DIR: "."
+  AZURE_SERVICE_CONNECTION: "Infra-SP-Connection"
+
+stages:
+  - stage: Validate
+    jobs:
+      - job: Plan
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: AzureCLI@2
+            displayName: "Terraform Init/Plan"
+            inputs:
+              azureSubscription: $(AZURE_SERVICE_CONNECTION)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+                sudo apt-get update -y
+                sudo apt-get install -y unzip
+                curl -sLO https://releases.hashicorp.com/terraform/1.5.6/terraform_1.5.6_linux_amd64.zip
+                unzip terraform_1.5.6_linux_amd64.zip -d /usr/local/bin
+                terraform -version
+                cd $(TF_WORKING_DIR)
+                terraform init -input=false
+                terraform validate
+                terraform plan -out=tfplan -input=false
+          - publish: $(TF_WORKING_DIR)/tfplan
+            artifact: tfplan
+
+  - stage: Apply
+    dependsOn: Validate
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: Apply
+        environment: 'prod'
+        pool:
+          vmImage: ubuntu-latest
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: tfplan
+                - task: AzureCLI@2
+                  displayName: "Terraform Apply"
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      sudo apt-get update -y
+                      sudo apt-get install -y unzip
+                      curl -sLO https://releases.hashicorp.com/terraform/1.5.6/terraform_1.5.6_linux_amd64.zip
+                      unzip terraform_1.5.6_linux_amd64.zip -d /usr/local/bin
+                      cd $(TF_WORKING_DIR)
+                      terraform init -input=false
+                      terraform apply -input=false -auto-approve tfplan
